@@ -699,6 +699,7 @@ static int input_thread(void *arg)
     d->read_started    = 1;
     d->wallclock_start = av_gettime_relative();
 
+    int64_t start_time = -1;
     while (1) {
         DemuxStream *ds;
         unsigned send_flags = 0;
@@ -706,9 +707,16 @@ static int input_thread(void *arg)
         ret = av_read_frame(f->ctx, dt.pkt_demux);
 
         if (ret == AVERROR(EAGAIN)) {
+            if (start_time == -1) {
+                start_time = av_gettime();
+            } else {
+                int64_t distance_time = (av_gettime() - start_time) / 1000;
+                av_log(avctx, AV_LOG_TRACE, "av_read_frame again:%lld\n", distance_time);
+            }
             av_usleep(10000);
             continue;
         }
+        start_time = -1;
         if (ret < 0) {
             int ret_bsf;
 

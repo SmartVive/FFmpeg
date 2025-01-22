@@ -32,6 +32,8 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/pixfmt.h"
 #include "libavutil/internal.h"
+#include "libavutil/time.h"
+#include "libavutil/error.h"
 
 #include "avcodec.h"
 #include "codec_internal.h"
@@ -510,6 +512,7 @@ static int mediacodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
     if (ret != AVERROR(EAGAIN))
         return ret;
 
+    int64_t start_time = av_gettime();
     /* feed decoder */
     while (1) {
         if (s->ctx->current_input_buffer < 0 && !s->ctx->draining) {
@@ -524,8 +527,14 @@ static int mediacodec_receive_frame(AVCodecContext *avctx, AVFrame *frame)
                  * return EAGAIN, which violate the design.
                  */
                 if (ff_AMediaCodec_infoTryAgainLater(s->ctx->codec, index) &&
-                    ret == AVERROR(EAGAIN))
+                    ret == AVERROR(EAGAIN)) {
+                    int64_t distance_time = (av_gettime() - start_time) / 1000;
+                    if (distance_time >= 3000) {
+                        av_log(avctx, AV_LOG_TRACE, "mediacodec_dec_receive timeout:%lld\n", distance_time);
+                        return AVERROR_EXTERNAL;
+                    }
                     continue;
+                }
                 return ret;
             }
             s->ctx->current_input_buffer = index;
